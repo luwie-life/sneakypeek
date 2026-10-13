@@ -1,0 +1,13 @@
+User-agent: *
+Allow: /
+Allow: /p/
+Allow: /login
+Allow: /signup
+Allow: /privacy
+Allow: /terms
+Allow: /contact
+Disallow: /dashboard
+Disallow: /admin
+Disallow: /onboarding
+
+Sitemap: https://sneakypeek.com/sitemap.xml

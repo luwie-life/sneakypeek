@@ -1,0 +1,18 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!--
+  Static, hand-maintained sitemap covering only the always-public marketing
+  routes. It deliberately does NOT list individual /p/:slug experience
+  pages: those are created/published/unpublished dynamically by creators,
+  and listing them here would require either a build-time script that
+  queries MongoDB before each deploy, or a small server-rendered sitemap
+  endpoint — neither exists yet. Adding one is the natural next step once
+  there's a real volume of published experiences worth indexing; until
+  then, this file should not be described as database-driven.
+-->
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>https://sneakypeek.com/</loc>
+    <changefreq>weekly</changefreq>
+    <priority>1.0</priority>
+  </url>
+</urlset>

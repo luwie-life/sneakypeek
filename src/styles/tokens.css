@@ -1,0 +1,54 @@
+/*
+  Sneaky Peek — Design Tokens
+  Black / White / Claude-orange. Everything else derives from these.
+  Change the palette here, nowhere else.
+*/
+
+:root {
+  /* Core palette */
+  --sp-ink: #141413;          /* near-black, primary text */
+  --sp-paper: #ffffff;        /* primary background */
+  --sp-surface: #faf9f7;      /* secondary/panel background */
+  --sp-line: #e8e6e1;         /* borders, dividers */
+  --sp-muted: #7a776f;        /* secondary text */
+
+  /* Accent — Claude-style orange */
+  --sp-accent: #d97757;
+  --sp-accent-soft: #f2ded4;
+  --sp-accent-dim: #b35f42;
+
+  /* Radii */
+  --sp-radius-sm: 10px;
+  --sp-radius-lg: 20px;
+  --sp-radius-xl: 32px;
+
+  /* Motion */
+  --sp-ease: cubic-bezier(0.16, 1, 0.3, 1);
+  --sp-ease-soft: cubic-bezier(0.25, 0.8, 0.25, 1);
+  --sp-duration-fast: 160ms;
+  --sp-duration-base: 320ms;
+  --sp-duration-slow: 560ms;
+
+  /* Glass (used sparingly — see brand guidance) */
+  --sp-glass-bg: rgba(255, 255, 255, 0.6);
+  --sp-glass-border: rgba(255, 255, 255, 0.4);
+}
+
+.dark {
+  --sp-ink: #f5f4f1;
+  --sp-paper: #141413;
+  --sp-surface: #1c1b19;
+  --sp-line: #2c2b28;
+  --sp-muted: #9b988f;
+  --sp-glass-bg: rgba(20, 20, 19, 0.6);
+  --sp-glass-border: rgba(255, 255, 255, 0.08);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
