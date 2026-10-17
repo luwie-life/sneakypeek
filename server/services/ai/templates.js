@@ -1,63 +1,79 @@
 /**
- * Each product type gets its own section flow instead of one generic
- * template. "type" is a stable machine key (used by the frontend to pick
- * an icon/label); "guidance" tells the model what that section is for.
+ * Each product type gets its own journey instead of one generic template.
+ * "type" is a key from services/experience/sections.js SECTION_TYPES (which
+ * also determines the structured `data` shape the model must return);
+ * "guidance" tells the model what that section is for in this journey.
+ *
+ * Journey shape for every type: capture attention → relevance → a real
+ * taste of the value (excerpt / mini-lesson / sample / specs) → an
+ * interactive or practical element where it fits → curiosity → objections
+ * → purchase CTA.
  */
 export const SECTION_FLOWS = {
   book: [
-    { type: 'hook', guidance: 'A one- or two-line hook that creates immediate curiosity about the book.' },
-    { type: 'context', guidance: 'Brief context: who this book is for and the problem or itch it addresses.' },
-    { type: 'chapter_preview', guidance: 'A short preview of a compelling chapter or excerpt — a real taste, not a summary of the whole book.' },
-    { type: 'insight', guidance: 'One genuinely interesting insight or idea from the book, stated plainly.' },
-    { type: 'curiosity_gap', guidance: 'A statement that opens a gap the reader wants closed — raises a question the book answers.' },
-    { type: 'cta', guidance: 'A short, confident call to action to get the book.' },
+    { type: 'hook', guidance: 'One or two lines that create immediate curiosity about the book.' },
+    { type: 'context', guidance: 'Who this book is for and the question or itch it addresses.' },
+    { type: 'excerpt', guidance: 'A real passage the reader can read now — copied VERBATIM from the supplied material, ending at a natural cliffhanger. Omit this section if no manuscript text was supplied.' },
+    { type: 'insight', guidance: 'One genuinely interesting idea from the book, stated plainly.' },
+    { type: 'curiosity_gap', guidance: 'Open a question the rest of the book answers — the natural stopping point.' },
+    { type: 'faq', guidance: '2-4 questions a hesitant buyer would ask, answered ONLY from facts provided (length, format, who it is for). Omit questions you cannot answer from the facts.' },
+    { type: 'cta', guidance: 'A short, confident invitation to get the full book.' },
   ],
   course: [
     { type: 'problem', guidance: 'The specific problem or frustration this course solves.' },
-    { type: 'mini_lesson', guidance: 'A small, real piece of teaching from the course — something the visitor can use immediately.' },
-    { type: 'exercise', guidance: 'A short interactive-feeling exercise or reflection prompt tied to the mini lesson.' },
-    { type: 'result', guidance: 'The concrete result or transformation a student gets from finishing the course.' },
-    { type: 'course_promise', guidance: 'The course\'s core promise — what it guarantees the student will be able to do.' },
-    { type: 'cta', guidance: 'A short, confident call to action to enroll.' },
-  ],
-  template: [
-    { type: 'problem', guidance: 'The tedious or hard problem this template removes.' },
-    { type: 'interactive_preview', guidance: 'Describe what the template looks like in use — concrete and visual.' },
-    { type: 'result', guidance: 'The end result someone gets by using the template.' },
-    { type: 'whats_included', guidance: 'A plain-language rundown of what is included in the template.' },
-    { type: 'cta', guidance: 'A short, confident call to action to get the template.' },
-  ],
-  audio: [
-    { type: 'hook', guidance: 'A hook that captures the tone and appeal of this audio/podcast in one or two lines.' },
-    { type: 'audio_preview', guidance: 'Describe a compelling moment or clip from the audio, in words (no audio playback yet).' },
-    { type: 'insight', guidance: 'One key insight or memorable moment from the episode/series.' },
-    { type: 'why_it_matters', guidance: 'Why this matters to the listener right now.' },
-    { type: 'cta', guidance: 'A short, confident call to action to listen.' },
+    { type: 'mini_lesson', guidance: 'A small, real lesson from the course in 2-4 steps the visitor can use immediately.' },
+    { type: 'quiz', guidance: '2-3 multiple-choice questions that check understanding of the mini lesson, each with a short explanation.' },
+    { type: 'exercise', guidance: 'A short reflection or practice prompt that applies the mini lesson to the visitor\'s own situation.' },
+    { type: 'what_they_will_learn', guidance: 'What the full course covers, as a short list — only topics supported by the material.' },
+    { type: 'result', guidance: 'The concrete outcome a student can expect after finishing.' },
+    { type: 'faq', guidance: '2-4 likely objections (time, level, format) answered ONLY from facts provided.' },
+    { type: 'cta', guidance: 'A short, confident invitation to enroll.' },
   ],
   guide: [
     { type: 'problem', guidance: 'The problem this guide solves, stated concretely.' },
-    { type: 'preview', guidance: 'A short preview of what is inside the guide.' },
-    { type: 'insight', guidance: 'One useful, standalone insight from the guide.' },
-    { type: 'what_they_will_learn', guidance: 'A plain list-style summary of what the reader will walk away knowing.' },
-    { type: 'cta', guidance: 'A short, confident call to action to get the guide.' },
+    { type: 'tips', guidance: '3-5 actionable tips from the guide the reader can apply today.' },
+    { type: 'framework', guidance: 'The guide\'s core framework or process as 3-6 named steps, each with one sentence.' },
+    { type: 'excerpt', guidance: 'A short sample section copied VERBATIM from the supplied material. Omit if no guide text was supplied.' },
+    { type: 'what_they_will_learn', guidance: 'What the complete guide covers, as a short list.' },
+    { type: 'faq', guidance: '2-4 likely questions answered ONLY from facts provided.' },
+    { type: 'cta', guidance: 'A short, confident invitation to get the full guide.' },
+  ],
+  template: [
+    { type: 'problem', guidance: 'The tedious or hard problem this template removes.' },
+    { type: 'template_preview', guidance: 'A realistic filled-in sample of the template as 4-8 label/value pairs (e.g. field name → example entry).' },
+    { type: 'whats_included', guidance: 'Exactly what is included (files, pages, formats) — only items supported by the facts.' },
+    { type: 'result', guidance: 'The intended outcome of using the template, with an example use case.' },
+    { type: 'faq', guidance: '2-4 practical questions (tools required, customization) answered ONLY from facts provided.' },
+    { type: 'cta', guidance: 'A short, confident invitation to get the template.' },
+  ],
+  audio: [
+    { type: 'hook', guidance: 'A hook that captures the tone and appeal of this audio in one or two lines.' },
+    { type: 'audio_preview', guidance: 'Describe a compelling moment from the audio, in words.' },
+    { type: 'insight', guidance: 'One key idea listeners take away.' },
+    { type: 'why_it_matters', guidance: 'Why this matters to the listener right now.' },
+    { type: 'cta', guidance: 'A short, confident invitation to listen.' },
   ],
   digital: [
-    { type: 'hook', guidance: 'A hook that captures what makes this digital product worth a second look.' },
-    { type: 'preview', guidance: 'A concrete preview of the product itself.' },
-    { type: 'benefits', guidance: 'The 2-3 clearest benefits of using this product.' },
-    { type: 'cta', guidance: 'A short, confident call to action to get it.' },
+    { type: 'hook', guidance: 'What makes this digital product worth a closer look.' },
+    { type: 'preview', guidance: 'A concrete description of the product in use.' },
+    { type: 'benefits', guidance: 'The 3-5 clearest benefits, as a list.' },
+    { type: 'whats_included', guidance: 'What the buyer receives — only items supported by the facts.' },
+    { type: 'faq', guidance: '2-4 practical questions answered ONLY from facts provided.' },
+    { type: 'cta', guidance: 'A short, confident invitation to get it.' },
   ],
   physical: [
-    { type: 'hook', guidance: 'A hook that captures what makes this product desirable.' },
-    { type: 'preview', guidance: 'A concrete, sensory description of the product.' },
-    { type: 'benefits', guidance: 'The clearest practical benefits of owning it.' },
-    { type: 'social_proof', guidance: 'A believable, non-fabricated framing of why people trust this product (do not invent specific quotes or numbers).' },
-    { type: 'cta', guidance: 'A short, confident call to action to buy it.' },
+    { type: 'hook', guidance: 'What makes this product desirable, in one or two lines.' },
+    { type: 'preview', guidance: 'A concrete, sensory description of the product and how it is used.' },
+    { type: 'benefits', guidance: 'The clearest practical benefits of owning it, as a list.' },
+    { type: 'specs', guidance: 'Specifications as label/value pairs (size, materials, contents...) — ONLY values stated in the facts; omit the section if none are given.' },
+    { type: 'faq', guidance: '2-4 buyer questions (shipping, care, sizing) answered ONLY from facts provided.' },
+    { type: 'cta', guidance: 'A short, confident invitation to buy it.' },
   ],
   other: [
     { type: 'hook', guidance: 'A hook that creates curiosity about this offering.' },
-    { type: 'introduction', guidance: 'A brief introduction to what it is and who it is for.' },
-    { type: 'benefits', guidance: 'The clearest benefits of this offering.' },
+    { type: 'introduction', guidance: 'What it is and who it is for.' },
+    { type: 'benefits', guidance: 'The clearest benefits, as a list.' },
+    { type: 'faq', guidance: '2-3 likely questions answered ONLY from facts provided.' },
     { type: 'cta', guidance: 'A short, confident call to action.' },
   ],
 }
