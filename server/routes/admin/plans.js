@@ -93,6 +93,13 @@ router.patch('/:id', async (req, res) => {
     // npm run billing:sync-plans to create one.
     if (req.body.providerPriceId !== undefined) plan.providerPriceId = req.body.providerPriceId.trim()
     if (req.body.currency !== undefined) plan.currency = req.body.currency.toLowerCase()
+    // A Flutterwave payment plan's amount/currency are fixed, so a price or
+    // currency change without a new plan id would make every new checkout
+    // fail the amount check. Clear it so checkout refuses clearly instead.
+    const priceChanged =
+      (req.body.monthlyPriceCents !== undefined && req.body.monthlyPriceCents !== before.monthlyPriceCents) ||
+      (req.body.currency !== undefined && req.body.currency.toLowerCase() !== before.currency)
+    if (priceChanged && req.body.providerPriceId === undefined) plan.providerPriceId = ''
     if (req.body.limits) Object.assign(plan.limits, req.body.limits)
     if (req.body.features) Object.assign(plan.features, req.body.features)
 

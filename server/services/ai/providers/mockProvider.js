@@ -76,7 +76,10 @@ function mockSection(type, title, prompt) {
     case 'excerpt': {
       const material = (String(prompt).match(/"""\n([\s\S]*?)\n"""/) || [])[1]
       if (!material) return null
-      return { ...base, body: material.slice(0, 400), data: { source: 'From the opening' } }
+      // Cut at a sentence end so the deterministic excerpt reads naturally.
+      const cut = material.slice(0, 400)
+      const end = Math.max(cut.lastIndexOf('. '), cut.lastIndexOf('.\n'))
+      return { ...base, body: end > 80 ? cut.slice(0, end + 1) : cut, data: { source: 'From the opening' } }
     }
     case 'quiz':
       return { ...base, data: { questions: [{ question: 'Which step comes first?', options: ['Plan', 'Ship'], answerIndex: 0, explanation: 'Planning first saves time.' }] } }
