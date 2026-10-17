@@ -11,7 +11,7 @@ export const PLAN_DEFAULTS = [
     slug: 'free',
     monthlyPriceCents: 0,
     order: 0,
-    description: 'Try Sneaky Peek — upgrade to unlock AI.',
+    description: 'Try Sneaky Peek — includes one AI-generated experience.',
     providerPriceId: '',
     // AI remains visible in the UI (AI Studio, section actions, etc. are
     // never hidden) — the server-side limit of 0 is what actually blocks
@@ -23,6 +23,8 @@ export const PLAN_DEFAULTS = [
       analyticsRetentionDays: 7,
       maxTeamMembers: 1,
       storageMB: 100,
+      // The single AI trial experience: one analysis + one generation.
+      aiTrialExperiences: 1,
     },
   },
   {

@@ -30,6 +30,10 @@ const planSchema = new mongoose.Schema(
       analyticsRetentionDays: { type: Number, default: 7 }, // -1 = all time
       maxTeamMembers: { type: Number, default: 1 },
       storageMB: { type: Number, default: 100 },
+      // Lifetime one-off AI trial (analysis + generation for one
+      // experience) for plans whose monthly AI allowance is 0. See
+      // entitlements.checkAiAccess.
+      aiTrialExperiences: { type: Number, default: 0 },
     },
 
     // Display order on the pricing page
