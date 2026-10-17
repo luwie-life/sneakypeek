@@ -18,6 +18,12 @@ const eventSchema = new mongoose.Schema({
   },
   eventType: { type: String, enum: EVENT_TYPES, required: true },
   sessionId: { type: String, default: null },
+  // Random, rotating, browser-generated id used only to count unique
+  // visitors across sessions. Not linked to any person; no IP is stored.
+  visitorId: { type: String, default: null },
+  // One event per (experience, session, type, section, day) — duplicate
+  // posts (re-renders, refreshes, scripted spam) are dropped at insert.
+  dedupeKey: { type: String, default: undefined },
   // Server-assigned, never trusts a client-sent timestamp (avoids clock skew / spoofing)
   timestamp: { type: Date, default: Date.now },
   sectionIndex: { type: Number, default: null },
@@ -34,5 +40,6 @@ eventSchema.index({ experience: 1, eventType: 1, timestamp: -1 })
 eventSchema.index({ experience: 1, sessionId: 1 })
 // Account-level (monetization) event queries
 eventSchema.index({ user: 1, eventType: 1, timestamp: -1 })
+eventSchema.index({ dedupeKey: 1 }, { unique: true, partialFilterExpression: { dedupeKey: { $type: 'string' } } })
 
 export default mongoose.model('Event', eventSchema)

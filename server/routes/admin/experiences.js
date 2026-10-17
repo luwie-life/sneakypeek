@@ -2,7 +2,7 @@ import { Router } from 'express'
 import Experience from '../../models/Experience.js'
 import ProductMaterial from '../../models/ProductMaterial.js'
 import Event from '../../models/Event.js'
-import { getFunnel, getSectionPerformance } from '../../services/analytics/aggregate.js'
+import { getAnalyticsReport } from '../../services/analytics/aggregate.js'
 import { parsePagination, paginatedResponse } from '../../services/admin/pagination.js'
 
 const router = Router()
@@ -73,11 +73,23 @@ router.get('/:id', async (req, res) => {
     const experience = await Experience.findById(req.params.id).populate('owner', 'name email')
     if (!experience) return res.status(404).json({ error: 'Experience not found' })
 
-    const [materialCount, funnel, sections] = await Promise.all([
+    const [materialCount, report] = await Promise.all([
       ProductMaterial.countDocuments({ experience: experience._id }),
-      getFunnel(experience._id, 'all'),
-      getSectionPerformance(experience._id, 'all', experience.sections),
+      getAnalyticsReport(experience, 'all'),
     ])
+    // Same response shape the admin UI already consumes.
+    const funnel = {
+      hasData: report.hasData,
+      steps: report.funnel.steps,
+      summary: {
+        visitors: report.summary.sessions,
+        engagementRate: report.summary.engagementRate,
+        completionRate: report.summary.completionRate,
+        ctaClickRate: report.summary.ctaClickRate,
+        checkoutClickRate: report.summary.checkoutClickRate,
+      },
+    }
+    const sections = report.sections
 
     res.json({
       experience: {
