@@ -26,6 +26,8 @@ import AnalyticsDashboard from './pages/AnalyticsDashboard'
 // actually benefits the people who never visit them.
 const AiStudio = lazy(() => import('./pages/AiStudio'))
 const Billing = lazy(() => import('./pages/Billing'))
+const StorefrontSettings = lazy(() => import('./pages/StorefrontSettings'))
+const PublicStorefront = lazy(() => import('./pages/PublicStorefront'))
 const AdminOverview = lazy(() => import('./pages/admin/AdminOverview'))
 const AdminUsers = lazy(() => import('./pages/admin/AdminUsers'))
 const AdminUserDetail = lazy(() => import('./pages/admin/AdminUserDetail'))
@@ -114,6 +116,10 @@ export default function App() {
               element={<DashboardPage title="Analytics"><AnalyticsDashboard /></DashboardPage>}
             />
             <Route
+              path="/dashboard/storefront"
+              element={<DashboardPage title="Storefront"><StorefrontSettings /></DashboardPage>}
+            />
+            <Route
               path="/dashboard/integrations"
               element={<DashboardPage title="Integrations"><ComingSoon label="Integrations" /></DashboardPage>}
             />
@@ -140,6 +146,7 @@ export default function App() {
             <Route path="/admin/audit-log" element={<AdminPage title="Audit Log"><AdminAuditLog /></AdminPage>} />
 
             <Route path="/p/:slug" element={<PublicExperience />} />
+            <Route path="/s/:slug" element={<PublicStorefront />} />
 
             <Route path="*" element={<NotFound />} />
           </Routes>

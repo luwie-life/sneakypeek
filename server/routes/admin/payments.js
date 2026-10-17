@@ -10,8 +10,8 @@ router.get('/', async (req, res) => {
     const { status, provider } = req.query
 
     const match = {}
-    if (status) match.status = status
-    if (provider) match.provider = provider
+    if (typeof status === 'string' && status) match.status = status
+    if (typeof provider === 'string' && provider) match.provider = provider
 
     const [payments, total] = await Promise.all([
       Payment.find(match)
@@ -33,6 +33,9 @@ router.get('/', async (req, res) => {
       providerTransactionId: p.providerTransactionId,
       txRef: p.txRef,
       status: p.status,
+      kind: p.kind,
+      failureReason: p.failureReason,
+      applied: Boolean(p.appliedAt),
       subscription: p.subscription,
       createdAt: p.createdAt,
     }))

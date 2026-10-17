@@ -52,8 +52,39 @@ const subscriptionSchema = new mongoose.Schema(
     grantNote: { type: String, default: '', trim: true },
     grantedBy: { type: mongoose.Schema.Types.ObjectId, ref: 'User', default: null },
     grantExpiresAt: { type: Date, default: null },
+
+    // Renewal-failure tracking. Set when a renewal charge fails; cleared
+    // by the next successful charge. Access continues until
+    // currentPeriodEnd + GRACE (see billing/lifecycle.js), then expires.
+    pastDueSince: { type: Date, default: null },
+    failedRenewalAttempts: { type: Number, default: 0 },
+    lastPaymentAt: { type: Date, default: null },
+    lastPaymentError: { type: String, default: null },
+    // Plan the remote (Flutterwave) subscription is attached to — used to
+    // attribute renewal charges and cancel the right remote record.
+    providerPlanId: { type: String, default: null },
+
+    // Append-only audit trail of status transitions (capped — see
+    // billing/lifecycle.js recordTransition).
+    history: {
+      type: [
+        {
+          at: { type: Date, default: Date.now },
+          from: String,
+          to: String,
+          plan: String,
+          reason: String,
+          ref: String,
+          _id: false,
+        },
+      ],
+      default: [],
+    },
   },
-  { timestamps: true }
+  // optimisticConcurrency: concurrent saves of the same subscription (a
+  // webhook racing /verify or /cancel) fail with a VersionError instead of
+  // silently overwriting each other; lifecycle.js retries on reload.
+  { timestamps: true, optimisticConcurrency: true }
 )
 
 export default mongoose.model('Subscription', subscriptionSchema)

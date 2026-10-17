@@ -1,3 +1,5 @@
+import { invalidateUserAuthCache } from '../../middleware/auth.js'
+import { recordTransition, hasPaidAccess } from '../../services/billing/entitlements.js'
 import { Router } from 'express'
 import mongoose from 'mongoose'
 import User from '../../models/User.js'
@@ -130,6 +132,12 @@ router.get('/:id', async (req, res) => {
         grantReason: subscription.grantReason,
         grantNote: subscription.grantNote,
         grantExpiresAt: subscription.grantExpiresAt,
+        hasAccess: hasPaidAccess(subscription),
+        pastDueSince: subscription.pastDueSince,
+        failedRenewalAttempts: subscription.failedRenewalAttempts,
+        lastPaymentAt: subscription.lastPaymentAt,
+        lastPaymentError: subscription.lastPaymentError,
+        history: (subscription.history || []).slice(-20).reverse(),
       },
     })
   } catch (err) {
@@ -176,6 +184,7 @@ router.patch('/:id/disabled', async (req, res) => {
     if (!user) return res.status(404).json({ error: 'User not found' })
 
     user.disabled = disabled
+    invalidateUserAuthCache(user._id)
     await user.save()
 
     await recordAudit({
@@ -221,8 +230,8 @@ router.post('/:id/grant-access', async (req, res) => {
     const subscription = await getSubscriptionForUser(req.params.id)
     const previousPlan = subscription.plan.slug
 
+    recordTransition(subscription, { to: 'active', reason: `complimentary_granted:${reason}`, plan: plan.slug })
     subscription.plan = plan._id
-    subscription.status = 'active'
     subscription.isComplimentary = true
     subscription.grantReason = reason
     subscription.grantNote = typeof note === 'string' ? note.slice(0, 500) : ''
@@ -245,6 +254,12 @@ router.post('/:id/grant-access', async (req, res) => {
         isComplimentary: true,
         grantReason: reason,
         grantExpiresAt: subscription.grantExpiresAt,
+        hasAccess: hasPaidAccess(subscription),
+        pastDueSince: subscription.pastDueSince,
+        failedRenewalAttempts: subscription.failedRenewalAttempts,
+        lastPaymentAt: subscription.lastPaymentAt,
+        lastPaymentError: subscription.lastPaymentError,
+        history: (subscription.history || []).slice(-20).reverse(),
       },
     })
   } catch (err) {
@@ -263,6 +278,7 @@ router.post('/:id/revoke-access', async (req, res) => {
     const { getFreePlan } = await import('../../services/billing/seedPlans.js')
     const freePlan = await getFreePlan()
 
+    recordTransition(subscription, { reason: 'complimentary_revoked', plan: 'free' })
     subscription.plan = freePlan._id
     subscription.isComplimentary = false
     subscription.grantReason = 'none'

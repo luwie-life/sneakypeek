@@ -1,6 +1,7 @@
 import { Router } from 'express'
 import Subscription from '../../models/Subscription.js'
 import { parsePagination, paginatedResponse } from '../../services/admin/pagination.js'
+import { hasPaidAccess } from '../../services/billing/entitlements.js'
 
 const router = Router()
 
@@ -10,8 +11,8 @@ router.get('/', async (req, res) => {
     const { status, provider, plan } = req.query
 
     const match = {}
-    if (status) match.status = status
-    if (provider) match.provider = provider
+    if (typeof status === 'string' && status) match.status = status
+    if (typeof provider === 'string' && provider) match.provider = provider
 
     let query = Subscription.find(match)
       .populate('user', 'name email')
@@ -53,6 +54,16 @@ function serializeList(subs) {
     currentPeriodStart: s.currentPeriodStart,
     currentPeriodEnd: s.currentPeriodEnd,
     cancelAtPeriodEnd: s.cancelAtPeriodEnd,
+    canceledAt: s.canceledAt,
+    pastDueSince: s.pastDueSince,
+    failedRenewalAttempts: s.failedRenewalAttempts,
+    lastPaymentAt: s.lastPaymentAt,
+    lastPaymentError: s.lastPaymentError,
+    isComplimentary: s.isComplimentary,
+    // Whether the user actually has paid features right now (status alone
+    // can lag, e.g. 'active' but past the grace period before the next read).
+    hasAccess: hasPaidAccess(s),
+    recentHistory: (s.history || []).slice(-5).reverse(),
     createdAt: s.createdAt,
   }))
 }

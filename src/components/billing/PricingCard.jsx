@@ -14,7 +14,8 @@ function limitLine(label, value) {
   return `${value} ${label}`
 }
 
-export default function PricingCard({ plan, isCurrent, onSelect, busy }) {
+export default function PricingCard({ plan, isCurrent, onSelect, busy, disabled = false }) {
+  const unavailable = !isCurrent && plan.monthlyPriceCents > 0 && plan.recurringReady === false
   return (
     <Card hover={!isCurrent} className={`flex flex-col ${isCurrent ? 'border-accent border-2' : ''}`}>
       <div className="mb-4">
@@ -32,7 +33,9 @@ export default function PricingCard({ plan, isCurrent, onSelect, busy }) {
         </li>
         <li className="flex items-start gap-2 text-sm text-muted">
           <Check size={15} className="text-accent shrink-0 mt-0.5" />
-          {limitLine('AI generations/mo', plan.limits.aiGenerationsPerMonth)}
+          {plan.limits.aiGenerationsPerMonth === 0 && plan.limits.aiTrialExperiences > 0
+            ? 'One-time AI trial (1 experience)'
+            : limitLine('AI generations/mo', plan.limits.aiGenerationsPerMonth)}
         </li>
         <li className="flex items-start gap-2 text-sm text-muted">
           <Check size={15} className="text-accent shrink-0 mt-0.5" />
@@ -40,6 +43,12 @@ export default function PricingCard({ plan, isCurrent, onSelect, busy }) {
             ? 'Full analytics history'
             : `${plan.limits.analyticsRetentionDays}-day analytics history`}
         </li>
+        {plan.limits.storageMB > 0 && (
+          <li className="flex items-start gap-2 text-sm text-muted">
+            <Check size={15} className="text-accent shrink-0 mt-0.5" />
+            {plan.limits.storageMB >= 1000 ? `${Math.round(plan.limits.storageMB / 1000)} GB` : `${plan.limits.storageMB} MB`} file storage
+          </li>
+        )}
         {plan.limits.maxTeamMembers > 1 && (
           <li className="flex items-start gap-2 text-sm text-muted">
             <Check size={15} className="text-accent shrink-0 mt-0.5" />
@@ -50,11 +59,12 @@ export default function PricingCard({ plan, isCurrent, onSelect, busy }) {
 
       <Button
         variant={isCurrent ? 'outline' : 'accent'}
-        disabled={isCurrent || busy}
+        disabled={isCurrent || busy || unavailable || disabled}
         onClick={() => onSelect(plan.slug)}
         className="w-full"
+        title={unavailable ? 'This plan is not available for purchase yet' : undefined}
       >
-        {isCurrent ? 'Current plan' : busy ? 'Please wait…' : `Choose ${plan.name}`}
+        {isCurrent ? 'Current plan' : busy ? 'Please wait…' : unavailable ? 'Not available yet' : `Choose ${plan.name}`}
       </Button>
     </Card>
   )

@@ -12,6 +12,7 @@ const LIMIT_LABELS = {
   analyticsRetentionDays: 'Analytics retention (days)',
   maxTeamMembers: 'Max team members',
   storageMB: 'Storage (MB)',
+  aiTrialExperiences: 'One-time AI trial (experiences)',
 }
 
 function LimitInput({ label, value, onChange }) {
@@ -36,6 +37,8 @@ export default function PlanCard({ plan, onSaved }) {
     active: plan.active,
     limits: { ...plan.limits },
     features: { ...plan.features },
+    currency: (plan.currency || 'usd').toUpperCase(),
+    providerPriceId: plan.providerPriceId || '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError] = useState('')
@@ -61,7 +64,10 @@ export default function PlanCard({ plan, onSaved }) {
         active: form.active,
         limits: form.limits,
         features: form.features,
+        currency: form.currency.toLowerCase(),
+        providerPriceId: form.providerPriceId.trim(),
       })
+      setForm((f) => ({ ...f, providerPriceId: updated.providerPriceId || '' }))
       onSaved(updated)
       setSaved(true)
       setTimeout(() => setSaved(false), 1800)
@@ -106,15 +112,40 @@ export default function PlanCard({ plan, onSaved }) {
       />
 
       <label className="flex flex-col gap-1 mb-4">
-        <span className="text-xs text-muted">Monthly price (USD)</span>
-        <input
-          type="number"
-          step="0.01"
-          value={form.priceDollars}
-          onChange={(e) => setForm({ ...form, priceDollars: e.target.value })}
-          className="text-sm rounded-lg border border-line bg-paper px-2.5 py-1.5 outline-none focus:border-accent w-32"
-        />
+        <span className="text-xs text-muted">Monthly price</span>
+        <span className="flex gap-2">
+          <input
+            type="number"
+            step="0.01"
+            value={form.priceDollars}
+            onChange={(e) => setForm({ ...form, priceDollars: e.target.value })}
+            className="text-sm rounded-lg border border-line bg-paper px-2.5 py-1.5 outline-none focus:border-accent w-28"
+            aria-label="Monthly price"
+          />
+          <input
+            value={form.currency}
+            maxLength={3}
+            onChange={(e) => setForm({ ...form, currency: e.target.value.toUpperCase().replace(/[^A-Z]/g, '') })}
+            className="text-sm rounded-lg border border-line bg-paper px-2.5 py-1.5 outline-none focus:border-accent w-16"
+            aria-label="Currency"
+          />
+        </span>
       </label>
+
+      {plan.monthlyPriceCents > 0 || parseFloat(form.priceDollars) > 0 ? (
+        <label className="flex flex-col gap-1 mb-4">
+          <span className="text-xs text-muted">Flutterwave payment plan ID</span>
+          <input
+            value={form.providerPriceId}
+            onChange={(e) => setForm({ ...form, providerPriceId: e.target.value })}
+            placeholder="Not set — checkout disabled"
+            className="text-sm rounded-lg border border-line bg-paper px-2.5 py-1.5 outline-none focus:border-accent"
+          />
+          <span className="text-[11px] text-muted">
+            Must be a monthly plan with this exact amount and currency. Changing the price clears it — create a new plan with npm run billing:sync-plans.
+          </span>
+        </label>
+      ) : null}
 
       <div className="grid grid-cols-2 gap-3 mb-4">
         {Object.keys(LIMIT_LABELS).map((key) => (

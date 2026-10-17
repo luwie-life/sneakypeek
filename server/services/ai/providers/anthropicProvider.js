@@ -24,6 +24,58 @@ export class AnthropicProvider extends AIProvider {
     }
   }
 
+  async _post(body) {
+    if (!this.configured) {
+      throw new Error('AI provider is not configured. Set ANTHROPIC_API_KEY in server/.env')
+    }
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), Number(process.env.AI_TIMEOUT_MS || 90000))
+    let res
+    try {
+      res = await fetch('https://api.anthropic.com/v1/messages', {
+        method: 'POST',
+        headers: {
+          'content-type': 'application/json',
+          'x-api-key': this.apiKey,
+          'anthropic-version': '2023-06-01',
+        },
+        body: JSON.stringify(body),
+        signal: controller.signal,
+      })
+    } catch (err) {
+      throw new Error(err.name === 'AbortError' ? 'AI request timed out' : `AI request failed: ${err.message}`)
+    } finally {
+      clearTimeout(timer)
+    }
+    if (!res.ok) {
+      const text = await res.text().catch(() => '')
+      throw new Error(`AI request failed (${res.status}): ${text.slice(0, 300)}`)
+    }
+    return res.json()
+  }
+
+  /**
+   * Schema-constrained output via forced tool use: the model must "call"
+   * a single tool whose input_schema is our JSON schema, so the response
+   * arrives as a structured object rather than free text to be parsed.
+   */
+  async completeStructured({ system, prompt, schema, schemaName = 'result', maxTokens = 2000 }) {
+    if (!schema) return this.completeJSON({ system, prompt, maxTokens })
+    const data = await this._post({
+      model: this.model,
+      max_tokens: maxTokens,
+      system,
+      tools: [{ name: schemaName, description: `Return the ${schemaName.replace(/_/g, ' ')}.`, input_schema: schema }],
+      tool_choice: { type: 'tool', name: schemaName },
+      messages: [{ role: 'user', content: prompt }],
+    })
+    const block = data.content?.find((b) => b.type === 'tool_use')
+    if (!block?.input || typeof block.input !== 'object') {
+      throw new Error('AI response did not include structured output')
+    }
+    return block.input
+  }
+
   async _request({ system, prompt, maxTokens = 1500 }) {
     if (!this.configured) {
       throw new Error(

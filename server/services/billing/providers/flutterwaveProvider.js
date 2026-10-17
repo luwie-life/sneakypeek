@@ -1,12 +1,40 @@
+import crypto from 'crypto'
 import { BillingProvider } from '../BillingProvider.js'
 
-const BASE_URL = 'https://api.flutterwave.com/v3'
+const DEFAULT_BASE_URL = 'https://api.flutterwave.com/v3'
 
+function safeEqual(a, b) {
+  if (typeof a !== 'string' || typeof b !== 'string') return false
+  const bufA = Buffer.from(a)
+  const bufB = Buffer.from(b)
+  return bufA.length === bufB.length && crypto.timingSafeEqual(bufA, bufB)
+}
+
+/**
+ * Flutterwave v3, using Payment Plans for recurring billing.
+ *
+ * Endpoints used (all documented at developer.flutterwave.com, v3):
+ *   POST /payments                       Standard checkout; `payment_plan` subscribes the card
+ *   GET  /transactions/{id}/verify       authoritative transaction status
+ *   GET  /transactions                   list (from, to, customer_email, status) — reconcile
+ *   POST /payment-plans                  create a monthly plan (scripts/syncPaymentPlans.js)
+ *   GET  /subscriptions                  filter by email, plan, status (active|cancelled)
+ *   PUT  /subscriptions/{id}/cancel      stop future renewals
+ *
+ * Constraints (from the Payment Plans docs): plans work with CARD payments
+ * only; the charge currency must match the plan currency; Flutterwave
+ * retries a failed renewal and cancels after three consecutive failures.
+ * Webhooks are authenticated with the static `verif-hash` header and must
+ * always be followed by verifyTransaction().
+ */
 export class FlutterwaveProvider extends BillingProvider {
-  constructor({ secretKey, secretHash } = {}) {
+  constructor({ secretKey, secretHash, baseUrl, fetchImpl } = {}) {
     super()
+    this.name = 'flutterwave'
     this.secretKey = secretKey || process.env.FLW_SECRET_KEY
     this.secretHash = secretHash || process.env.FLW_SECRET_HASH
+    this.baseUrl = baseUrl || process.env.FLW_BASE_URL || DEFAULT_BASE_URL
+    this.fetch = fetchImpl || fetch
     this.configured = Boolean(this.secretKey)
   }
 
@@ -16,34 +44,53 @@ export class FlutterwaveProvider extends BillingProvider {
     }
   }
 
-  async _request(path, { method = 'GET', body } = {}) {
+  async _request(path, { method = 'GET', body, query } = {}) {
     this._assertConfigured()
+    const qs = query
+      ? '?' + new URLSearchParams(Object.entries(query).filter(([, v]) => v !== undefined && v !== null && v !== '')).toString()
+      : ''
 
-    const res = await fetch(`${BASE_URL}${path}`, {
-      method,
-      headers: {
-        Authorization: `Bearer ${this.secretKey}`,
-        'Content-Type': 'application/json',
-      },
-      body: body ? JSON.stringify(body) : undefined,
-    })
+    const controller = new AbortController()
+    const timer = setTimeout(() => controller.abort(), 20000)
+    let res
+    try {
+      res = await this.fetch(`${this.baseUrl}${path}${qs}`, {
+        method,
+        headers: {
+          Authorization: `Bearer ${this.secretKey}`,
+          'Content-Type': 'application/json',
+        },
+        body: body ? JSON.stringify(body) : undefined,
+        signal: controller.signal,
+      })
+    } finally {
+      clearTimeout(timer)
+    }
 
     const data = await res.json().catch(() => ({}))
 
     if (!res.ok || data.status === 'error') {
-      throw new Error(`Flutterwave request failed: ${data.message || res.status}`)
+      const err = new Error(`Flutterwave request failed: ${data.message || res.status}`)
+      err.httpStatus = res.status
+      throw err
     }
 
     return data
   }
 
   // Flutterwave has no persistent customer resource — email is the
-  // durable identifier we key everything off of.
+  // durable identifier (subscriptions are tied to it and can't change).
   async createCustomer({ email }) {
     return { customerId: email }
   }
 
   async createCheckoutSession({ email, name, plan, txRef, successUrl }) {
+    if (!plan.providerPriceId) {
+      // Without a payment plan this would be a one-off charge that never
+      // renews. Refuse rather than silently selling a "monthly" plan that
+      // stops after one month.
+      throw new Error(`Plan "${plan.slug}" has no Flutterwave payment plan configured (run npm run billing:sync-plans)`)
+    }
     const data = await this._request('/payments', {
       method: 'POST',
       body: {
@@ -53,13 +100,10 @@ export class FlutterwaveProvider extends BillingProvider {
         redirect_url: successUrl,
         customer: { email, name },
         payment_options: 'card',
-        // Attaches this charge to a recurring Payment Plan on Flutterwave's
-        // side, if one is configured for this plan. Without it, this is a
-        // one-off charge — see providerPriceId note in Plan.js.
-        payment_plan: plan.providerPriceId || undefined,
+        payment_plan: Number.isNaN(Number(plan.providerPriceId)) ? plan.providerPriceId : Number(plan.providerPriceId),
         customizations: {
           title: 'Sneaky Peek',
-          description: `${plan.name} plan — monthly`,
+          description: `${plan.name} plan — billed monthly until cancelled`,
         },
       },
     })
@@ -68,81 +112,88 @@ export class FlutterwaveProvider extends BillingProvider {
   }
 
   /**
-   * The one call that actually matters for security: re-confirms a
-   * transaction's outcome directly with Flutterwave, independent of
-   * whatever a webhook payload or browser redirect claimed.
+   * The one call that matters for security: re-confirms a transaction's
+   * outcome directly with Flutterwave, independent of whatever a webhook
+   * payload or browser redirect claimed.
    */
   async verifyTransaction({ transactionId }) {
-    const data = await this._request(`/transactions/${transactionId}/verify`)
-    const tx = data.data
-
+    let data
+    try {
+      data = await this._request(`/transactions/${encodeURIComponent(transactionId)}/verify`)
+    } catch (err) {
+      // A transaction id Flutterwave doesn't know is a permanent "no".
+      if (err.httpStatus === 400 || err.httpStatus === 404) return { status: 'failed', transactionId: null }
+      throw err
+    }
+    const tx = data.data || {}
     return {
       status: tx.status === 'successful' ? 'successful' : tx.status === 'failed' ? 'failed' : 'pending',
-      amount: tx.amount,
+      amount: Number(tx.amount),
       currency: tx.currency,
       txRef: tx.tx_ref,
       customerEmail: tx.customer?.email,
       transactionId: tx.id,
+      planId: tx.plan ?? tx.payment_plan ?? null,
+      processorResponse: tx.processor_response || null,
+      paymentType: tx.payment_type || null,
     }
   }
 
+  /** Lists transactions for reconciliation (dates as YYYY-MM-DD). */
+  async listTransactions({ email, from, to, status }) {
+    const data = await this._request('/transactions', {
+      query: { customer_email: email, from, to, status },
+    })
+    return (data.data || []).map((tx) => ({ id: tx.id, status: tx.status, txRef: tx.tx_ref, amount: tx.amount, currency: tx.currency }))
+  }
+
   /**
-   * Flutterwave auto-creates a Subscription record when a charge against a
-   * Payment Plan succeeds, separate from the transaction itself. We look
-   * it up by customer email since that's the identifier we have. This
-   * endpoint's exact filtering behavior should be confirmed against live
-   * Flutterwave docs/dashboard before relying on it in production — it is
-   * not exercised by anything in this codebase's automated tests, since
-   * doing so requires live credentials.
+   * Finds the subscriber's subscription (optionally for one plan / status).
+   * Returns null when none exists; THROWS on network/API errors so callers
+   * can tell "no subscription" from "couldn't check".
    */
+  async findSubscription({ email, planId, status } = {}) {
+    if (!email) return null
+    const data = await this._request('/subscriptions', { query: { email, plan: planId, status } })
+    const items = Array.isArray(data.data) ? data.data : []
+    const match = items.find((s) => !status || String(s.status).toLowerCase() === status) || null
+    return match ? { id: match.id, status: match.status, plan: match.plan } : null
+  }
+
+  // Back-compat with the previous helper name.
   async findSubscriptionByEmail(email) {
-    try {
-      const data = await this._request(`/subscriptions?customer_email=${encodeURIComponent(email)}`)
-      return data.data?.[0] || null
-    } catch {
-      return null
-    }
+    return this.findSubscription({ email }).catch(() => null)
   }
 
   async cancelSubscription({ subscriptionId }) {
     if (!subscriptionId) return { ok: true, remote: false }
-    await this._request(`/subscriptions/${subscriptionId}/cancel`, { method: 'PUT' })
+    await this._request(`/subscriptions/${encodeURIComponent(subscriptionId)}/cancel`, { method: 'PUT' })
     return { ok: true, remote: true }
   }
 
+  async createPaymentPlan({ name, amount, currency, interval = 'monthly' }) {
+    const data = await this._request('/payment-plans', {
+      method: 'POST',
+      body: { name, amount, currency: currency.toUpperCase(), interval },
+    })
+    return { id: data.data?.id, raw: data.data }
+  }
+
   /**
-   * Flutterwave signs webhooks with a static shared secret compared
-   * verbatim against the "verif-hash" header — not an HMAC over the body,
-   * so no raw-body byte-exactness is required the way Stripe needs it.
-   * Per Flutterwave's own guidance, this header check alone is NOT
-   * sufficient proof of payment — callers must always follow up with
-   * verifyTransaction() before applying any state change.
+   * Flutterwave sends the secret hash configured in the dashboard verbatim
+   * in the `verif-hash` header (not an HMAC). Compared in constant time.
+   * Per Flutterwave's guidance, this alone is NOT proof of payment —
+   * callers must still call verifyTransaction() before applying anything.
    */
   verifyAndParseWebhook({ body, headers }) {
     if (!this.secretHash) {
       throw new Error('FLW_SECRET_HASH is not set — cannot verify webhook authenticity')
     }
-
     const receivedHash = headers['verif-hash']
-    if (!receivedHash || receivedHash !== this.secretHash) {
+    if (!safeEqual(receivedHash, this.secretHash)) {
       throw new Error('Webhook verif-hash did not match — possible spoofed request')
     }
-
-    return { type: body.event, data: body.data }
-  }
-
-  /** Maps a Flutterwave transaction/subscription status to our own status enum. */
-  static mapStatus(flwStatus) {
-    switch (flwStatus) {
-      case 'active':
-        return 'active'
-      case 'cancelled':
-      case 'canceled':
-        return 'canceled'
-      case 'expired':
-        return 'expired'
-      default:
-        return 'active'
-    }
+    if (!body || typeof body !== 'object') throw new Error('Webhook body is not JSON')
+    return { type: body.event || body.type, data: body.data || {} }
   }
 }

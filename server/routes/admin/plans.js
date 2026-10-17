@@ -6,7 +6,7 @@ import { recordAudit } from '../../services/admin/audit.js'
 const router = Router()
 
 const KNOWN_FEATURE_KEYS = ['aiStudio', 'analytics']
-const KNOWN_LIMIT_KEYS = ['maxExperiences', 'aiGenerationsPerMonth', 'analyticsRetentionDays', 'maxTeamMembers', 'storageMB']
+const KNOWN_LIMIT_KEYS = ['maxExperiences', 'aiGenerationsPerMonth', 'analyticsRetentionDays', 'maxTeamMembers', 'storageMB', 'aiTrialExperiences']
 
 router.get('/', async (_req, res) => {
   const plans = await Plan.find({}).sort({ order: 1 })
@@ -60,6 +60,12 @@ function validatePlanPatch(patch) {
   if ('slug' in patch) {
     throw new Error('Plan slug cannot be changed')
   }
+  if ('providerPriceId' in patch && (typeof patch.providerPriceId !== 'string' || patch.providerPriceId.length > 100)) {
+    throw new Error('providerPriceId must be a string (the Flutterwave payment plan id)')
+  }
+  if ('currency' in patch && (typeof patch.currency !== 'string' || !/^[a-z]{3}$/i.test(patch.currency))) {
+    throw new Error('currency must be a 3-letter ISO code')
+  }
 }
 
 router.patch('/:id', async (req, res) => {
@@ -74,12 +80,26 @@ router.patch('/:id', async (req, res) => {
       active: plan.active,
       limits: plan.limits.toObject ? plan.limits.toObject() : plan.limits,
       features: plan.features.toObject ? plan.features.toObject() : plan.features,
+      providerPriceId: plan.providerPriceId,
+      currency: plan.currency,
     }
 
     if (req.body.name !== undefined) plan.name = req.body.name
     if (req.body.description !== undefined) plan.description = req.body.description
     if (req.body.monthlyPriceCents !== undefined) plan.monthlyPriceCents = req.body.monthlyPriceCents
     if (req.body.active !== undefined) plan.active = req.body.active
+    // Changing price/currency invalidates the Flutterwave payment plan
+    // (its amount is fixed there) — set the new plan id alongside, or run
+    // npm run billing:sync-plans to create one.
+    if (req.body.providerPriceId !== undefined) plan.providerPriceId = req.body.providerPriceId.trim()
+    if (req.body.currency !== undefined) plan.currency = req.body.currency.toLowerCase()
+    // A Flutterwave payment plan's amount/currency are fixed, so a price or
+    // currency change without a new plan id would make every new checkout
+    // fail the amount check. Clear it so checkout refuses clearly instead.
+    const priceChanged =
+      (req.body.monthlyPriceCents !== undefined && req.body.monthlyPriceCents !== before.monthlyPriceCents) ||
+      (req.body.currency !== undefined && req.body.currency.toLowerCase() !== before.currency)
+    if (priceChanged && req.body.providerPriceId === undefined) plan.providerPriceId = ''
     if (req.body.limits) Object.assign(plan.limits, req.body.limits)
     if (req.body.features) Object.assign(plan.features, req.body.features)
 
@@ -102,7 +122,7 @@ router.patch('/:id', async (req, res) => {
 // No DELETE route: plans are deactivated (active:false via PATCH above),
 // never deleted — active subscriptions may still reference them.
 router.get('/:id/subscriber-count', async (req, res) => {
-  const count = await Subscription.countDocuments({ plan: req.params.id, status: { $in: ['active', 'trialing'] } })
+  const count = await Subscription.countDocuments({ plan: req.params.id, status: { $in: ['active', 'trialing', 'past_due'] } })
   res.json({ activeSubscribers: count })
 })
 

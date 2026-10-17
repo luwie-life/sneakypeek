@@ -9,6 +9,7 @@ import {
   Settings,
   Plus,
   LogOut,
+  Store,
 } from 'lucide-react'
 import RevealMark from './RevealMark'
 import Button from './ui/Button'
@@ -20,6 +21,7 @@ const NAV = [
   { to: '/dashboard/experiences', label: 'Experiences', icon: Sparkles },
   { to: '/dashboard/ai-studio', label: 'AI Studio', icon: Sparkles },
   { to: '/dashboard/analytics', label: 'Analytics', icon: BarChart3 },
+  { to: '/dashboard/storefront', label: 'Storefront', icon: Store },
   { to: '/dashboard/integrations', label: 'Integrations', icon: Plug },
   { to: '/dashboard/billing', label: 'Billing', icon: CreditCard },
   { to: '/dashboard/settings', label: 'Settings', icon: Settings },

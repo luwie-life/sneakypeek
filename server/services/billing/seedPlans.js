@@ -14,6 +14,18 @@ export async function ensurePlansSeeded() {
       console.log(`Seeded plan: ${defaults.slug}`)
     }
   }
+
+  // Additive, non-destructive migration: plans created before the AI trial
+  // existed have no `limits.aiTrialExperiences` at all. Fill in the default
+  // only where the field is missing — never overwrite an admin's value.
+  for (const defaults of PLAN_DEFAULTS) {
+    const trial = defaults.limits.aiTrialExperiences
+    if (trial === undefined) continue
+    await Plan.updateOne(
+      { slug: defaults.slug, 'limits.aiTrialExperiences': { $exists: false } },
+      { $set: { 'limits.aiTrialExperiences': trial } }
+    )
+  }
 }
 
 export async function getFreePlan() {

@@ -3,10 +3,50 @@ import { getUnderstandingAngle } from './understandingAngles.js'
 
 const SYSTEM_PROMPT = `You are the product-understanding engine inside Sneaky Peek. Your job is to read everything a creator has told us about their product — plus any raw material they've supplied — and distill it into structured knowledge that a separate copywriting step will later use to build a pre-purchase experience.
 
-Be specific and concrete. Never invent facts, statistics, testimonials, or claims that aren't supported by what you were given. If the material is thin, say less rather than making things up — shorter, honest arrays are better than padded, generic ones.`
+Be specific and concrete. Never invent facts, statistics, testimonials, credentials, guarantees, or claims that aren't supported by what you were given. If the material is thin, say less rather than making things up — shorter, honest arrays are better than padded, generic ones. When a buyer would reasonably want a fact you were not given (length, format, what's included, who made it), list it under missingInformation instead of guessing.`
 
 const STRING_FIELDS = ['productSummary', 'audienceSummary', 'coreProblem', 'corePromise']
-const ARRAY_FIELDS = ['keyBenefits', 'keyInsights', 'importantTopics', 'strongestHooks', 'objections', 'curiosityOpportunities']
+const ARRAY_FIELDS = [
+  'whatItContains',
+  'keyBenefits',
+  'keyInsights',
+  'importantTopics',
+  'differentiators',
+  'strongestHooks',
+  'objections',
+  'customerQuestions',
+  'curiosityOpportunities',
+  'demonstrationIdeas',
+  'missingInformation',
+]
+
+const stringArray = (description) => ({ type: 'array', items: { type: 'string' }, description })
+
+const UNDERSTANDING_SCHEMA = {
+  type: 'object',
+  properties: {
+    productSummary: { type: 'string', description: '2-3 sentences: what this product actually is' },
+    audienceSummary: { type: 'string', description: 'Who it is genuinely for' },
+    coreProblem: { type: 'string', description: 'The specific problem it addresses' },
+    corePromise: { type: 'string', description: 'What it concretely delivers (the customer outcome)' },
+    whatItContains: stringArray('What the product contains — only what the material supports'),
+    keyBenefits: stringArray('Strongest benefits'),
+    keyInsights: stringArray('Specific, interesting insights drawn from the material'),
+    importantTopics: stringArray('Topics covered'),
+    differentiators: stringArray('What makes it different from alternatives, if supported'),
+    strongestHooks: stringArray('Candidate opening lines'),
+    objections: stringArray('Real purchase objections'),
+    customerQuestions: stringArray('Questions a potential customer would ask'),
+    curiosityOpportunities: stringArray('Gaps/questions the preview can open'),
+    demonstrationIdeas: stringArray('The best ways to let a visitor experience the value before buying'),
+    missingInformation: stringArray('Facts the creator must provide that the material does not state'),
+    recommendedSections: {
+      type: 'array',
+      items: { type: 'object', properties: { type: { type: 'string' }, guidance: { type: 'string' } }, required: ['guidance'] },
+    },
+  },
+  required: ['productSummary', 'corePromise'],
+}
 
 function buildPrompt({ experience, materialsText, angle }) {
   const facts = [
@@ -38,19 +78,27 @@ Return JSON in exactly this shape:
   "audienceSummary": "who this is genuinely for, 1-2 sentences",
   "coreProblem": "the specific problem or itch this addresses, 1 sentence",
   "corePromise": "what it concretely delivers, 1 sentence",
+  "whatItContains": ["what is actually inside the product", "..."],
   "keyBenefits": ["short benefit", "..."],
   "keyInsights": ["a genuinely interesting, specific insight drawn from the material", "..."],
   "importantTopics": ["topic", "..."],
+  "differentiators": ["what makes it different, if supported", "..."],
   "strongestHooks": ["a candidate opening line/hook", "..."],
   "objections": ["a real objection a buyer might have", "..."],
+  "customerQuestions": ["a question a potential customer would ask", "..."],
   "curiosityOpportunities": ["a specific gap or question this material could open", "..."],
+  "demonstrationIdeas": ["how a preview could let a visitor experience the value", "..."],
+  "missingInformation": ["a fact the creator should provide", "..."],
   "recommendedSections": [{ "type": "section_type", "guidance": "what this section should cover for this specific product" }]
 }`
 }
 
 function coerceStringArray(value) {
   if (!Array.isArray(value)) return []
-  return value.filter((v) => typeof v === 'string' && v.trim()).map((v) => v.trim())
+  return value
+    .filter((v) => typeof v === 'string' && v.trim())
+    .map((v) => v.trim().slice(0, 400))
+    .slice(0, 12)
 }
 
 /**
@@ -67,7 +115,7 @@ export function validateUnderstanding(parsed) {
 
   const result = {}
   for (const field of STRING_FIELDS) {
-    result[field] = typeof parsed[field] === 'string' ? parsed[field].trim() : ''
+    result[field] = typeof parsed[field] === 'string' ? parsed[field].trim().slice(0, 1500) : ''
   }
   for (const field of ARRAY_FIELDS) {
     result[field] = coerceStringArray(parsed[field])
@@ -95,10 +143,12 @@ export async function analyzeProduct({ experience, materialsText }) {
   const provider = getAIProvider()
   const angle = getUnderstandingAngle(experience.productType)
 
-  const parsed = await provider.completeJSON({
+  const parsed = await provider.completeStructured({
     system: SYSTEM_PROMPT,
     prompt: buildPrompt({ experience, materialsText, angle }),
-    maxTokens: 2000,
+    schema: UNDERSTANDING_SCHEMA,
+    schemaName: 'product_understanding',
+    maxTokens: 2500,
   })
 
   return validateUnderstanding(parsed)

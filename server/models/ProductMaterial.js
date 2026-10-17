@@ -9,7 +9,16 @@ export const MATERIAL_TYPES = [
   'image',
   'audio',
   'video',
+  'file',
 ]
+
+// 'source' = private input for the AI (never public). 'deliverable' = a
+// downloadable resource attached to the experience for visitors.
+export const MATERIAL_ROLES = ['source', 'deliverable']
+// Deliverable access levels. 'free' = downloadable from the public page.
+// 'restricted' = listed as included with purchase, never downloadable
+// publicly. 'private' = creator-only (default; also for all sources).
+export const MATERIAL_ACCESS = ['private', 'free', 'restricted']
 
 export const MATERIAL_STATUSES = ['pending', 'processing', 'ready', 'failed']
 
@@ -36,6 +45,15 @@ const materialSchema = new mongoose.Schema(
     // Raw pasted/typed content, for text-based types.
     content: { type: String, default: '' },
 
+    role: { type: String, enum: MATERIAL_ROLES, default: 'source', index: true },
+    access: { type: String, enum: MATERIAL_ACCESS, default: 'private' },
+    description: { type: String, trim: true, default: '' },
+    fileName: { type: String, trim: true, default: '' },
+    mimeType: { type: String, trim: true, default: '' },
+    sizeBytes: { type: Number, default: 0 },
+    downloadCount: { type: Number, default: 0 },
+    order: { type: Number, default: 0 },
+
     status: { type: String, enum: MATERIAL_STATUSES, default: 'pending' },
     metadata: { type: mongoose.Schema.Types.Mixed, default: {} },
     extractedText: { type: String, default: '' },
@@ -45,5 +63,6 @@ const materialSchema = new mongoose.Schema(
 )
 
 materialSchema.index({ experience: 1, createdAt: -1 })
+materialSchema.index({ user: 1, sizeBytes: 1 })
 
 export default mongoose.model('ProductMaterial', materialSchema)

@@ -15,6 +15,12 @@ export const EVENT_TYPES = [
   'cta_clicked',
   'checkout_clicked',
   'experience_completed',
+  // A visitor finished an interactive element (quiz answered, exercise done).
+  'interaction_completed',
+  // Recorded server-side by the public download endpoint, never by the client.
+  'asset_downloaded',
+  // Public storefront page view (stored with `user` = the storefront owner).
+  'storefront_viewed',
   // Monetization/lifecycle — account-level, see MONETIZATION_* splits below
   'upgrade_prompt_viewed',
   'upgrade_started',
@@ -71,10 +77,36 @@ export const SERVER_ONLY_EVENTS = [
   'complimentary_access_expired',
 ]
 
+/**
+ * Events an anonymous visitor's browser may report for a public
+ * experience. Anything else posted to the public events endpoint is
+ * dropped — previously ANY event type (including server-only billing
+ * events like checkout_completed) could be written by an anonymous POST.
+ */
+export const VISITOR_EVENTS = [
+  'experience_viewed',
+  'experience_started',
+  'section_viewed',
+  'section_completed',
+  'interaction_completed',
+  'cta_viewed',
+  'cta_clicked',
+  'checkout_clicked',
+  'experience_completed',
+]
+
+/** Events that need a section index to be meaningful. */
+export const SECTION_EVENTS = ['section_viewed', 'section_completed', 'interaction_completed']
+
+/**
+ * Funnel shown to creators. Each step counts distinct visitor sessions.
+ * "Checkout opened" is a click to the creator's external checkout — NOT a
+ * confirmed purchase; Sneaky Peek cannot see the creator's sales.
+ */
 export const FUNNEL_STEPS = [
-  { key: 'visitors', eventType: 'experience_viewed', label: 'Visitors' },
-  { key: 'started', eventType: 'experience_started', label: 'Started' },
-  { key: 'engaged', eventType: 'section_viewed', label: 'Engaged' },
-  { key: 'ctaViewed', eventType: 'cta_viewed', label: 'CTA Viewed' },
-  { key: 'checkoutClicked', eventType: 'checkout_clicked', label: 'Checkout' },
+  { key: 'visitors', eventType: 'experience_viewed', label: 'Visited' },
+  { key: 'started', eventType: 'experience_started', label: 'Started reading' },
+  { key: 'engaged', eventType: 'section_viewed', label: 'Viewed a section' },
+  { key: 'ctaViewed', eventType: 'cta_viewed', label: 'Saw the offer' },
+  { key: 'checkoutClicked', eventType: 'checkout_clicked', label: 'Opened checkout' },
 ]

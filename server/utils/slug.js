@@ -29,3 +29,23 @@ export async function generateUniqueSlug(title) {
   // Extremely unlikely fallback
   return `${base}-${nanoid(10).toLowerCase()}`
 }
+
+export { slugify }
+
+// Storefront slugs live at /s/:slug. Reserved words avoid confusing or
+// impersonating platform pages.
+const RESERVED_STOREFRONT_SLUGS = new Set([
+  'admin', 'api', 'app', 'auth', 'billing', 'dashboard', 'help', 'login', 'logout', 'p', 's',
+  'settings', 'signup', 'sneakypeek', 'sneaky-peek', 'store', 'support', 'www', 'luwie', 'official',
+])
+
+/** Returns a normalized storefront slug, or throws with a user-facing message. */
+export function validateStorefrontSlug(input) {
+  if (typeof input !== 'string') throw new Error('Storefront address is required')
+  const slug = input.trim().toLowerCase()
+  if (!/^[a-z0-9](?:[a-z0-9-]{1,38})[a-z0-9]$/.test(slug) || slug.includes('--')) {
+    throw new Error('Storefront address must be 3-40 characters: lowercase letters, numbers and single hyphens')
+  }
+  if (RESERVED_STOREFRONT_SLUGS.has(slug)) throw new Error('That storefront address is reserved — please choose another')
+  return slug
+}

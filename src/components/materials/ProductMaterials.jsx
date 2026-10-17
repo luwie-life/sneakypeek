@@ -138,6 +138,7 @@ export default function ProductMaterials({ experienceId }) {
       setUnderstanding(productUnderstanding)
     } catch (err) {
       if (err.limitReached) setLimitError(err)
+      else if (err.aiBusy) setError('Another AI request from your account is still running. Try again in a moment.')
       else setError(err.message)
     } finally {
       setAnalyzing(false)
@@ -204,7 +205,7 @@ export default function ProductMaterials({ experienceId }) {
       </div>
 
       {limitError ? (
-        <AiUpgradePrompt onDismiss={() => setLimitError(null)} />
+        <AiUpgradePrompt trialUsed={Boolean(limitError.trialUsed)} monthlyLimit={!limitError.trialUsed && limitError.limit > 0} onDismiss={() => setLimitError(null)} />
       ) : (
         <>
           <Button
@@ -232,6 +233,26 @@ export default function ProductMaterials({ experienceId }) {
                     </li>
                   ))}
                 </ul>
+              )}
+              {understanding.whatItContains?.length > 0 && (
+                <div className="mt-4">
+                  <p className="text-xs font-medium text-ink mb-1.5">What it contains</p>
+                  <ul className="flex flex-col gap-1">
+                    {understanding.whatItContains.slice(0, 6).map((x, i) => (
+                      <li key={i} className="text-xs text-muted flex gap-2"><span className="text-accent">•</span> {x}</li>
+                    ))}
+                  </ul>
+                </div>
+              )}
+              {understanding.missingInformation?.length > 0 && (
+                <div className="mt-4 rounded-lg border border-line bg-surface px-3 py-2.5">
+                  <p className="text-xs font-medium text-ink mb-1.5">Add these to get a better draft</p>
+                  <ul className="flex flex-col gap-1">
+                    {understanding.missingInformation.slice(0, 6).map((x, i) => (
+                      <li key={i} className="text-xs text-muted flex gap-2"><span aria-hidden="true">–</span> {x}</li>
+                    ))}
+                  </ul>
+                </div>
               )}
             </div>
           )}

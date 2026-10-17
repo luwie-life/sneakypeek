@@ -43,6 +43,22 @@ export default function AdminSubscriptions() {
           { key: 'trialEnd', label: 'Trial ends', render: (r) => r.trialEnd ? new Date(r.trialEnd).toLocaleDateString() : '—' },
           { key: 'currentPeriodEnd', label: 'Period end', render: (r) => r.currentPeriodEnd ? new Date(r.currentPeriodEnd).toLocaleDateString() : '—' },
           { key: 'cancelAtPeriodEnd', label: 'Canceling', render: (r) => r.cancelAtPeriodEnd ? 'Yes' : 'No' },
+          { key: 'hasAccess', label: 'Paid access', render: (r) => (r.hasAccess ? 'Yes' : 'No') },
+          {
+            key: 'lastPaymentAt',
+            label: 'Last payment',
+            render: (r) =>
+              r.lastPaymentError
+                ? `Failed: ${r.lastPaymentError}`
+                : r.lastPaymentAt
+                  ? new Date(r.lastPaymentAt).toLocaleDateString()
+                  : '—',
+          },
+          {
+            key: 'recentHistory',
+            label: 'Latest change',
+            render: (r) => (r.recentHistory?.[0] ? `${r.recentHistory[0].reason} (${new Date(r.recentHistory[0].at).toLocaleDateString()})` : '—'),
+          },
         ]}
         rows={items}
       />

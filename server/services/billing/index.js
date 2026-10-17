@@ -27,6 +27,11 @@ export function getBillingProvider() {
   return cached
 }
 
+/** Lets tests inject a provider (e.g. Flutterwave against a fake API). */
+export function _setBillingProvider(provider) {
+  cached = provider
+}
+
 /** Lets tests reset the cached provider between runs. */
 export function _resetBillingProviderCache() {
   cached = null

@@ -20,10 +20,27 @@ const paymentSchema = new mongoose.Schema(
     providerTransactionId: { type: String, default: null },
     txRef: { type: String, default: null, index: true },
     status: { type: String, enum: ['successful', 'failed', 'pending'], required: true },
+    // 'initial' = first charge from our checkout; 'renewal' = a charge
+    // Flutterwave made automatically against the payment plan.
+    kind: { type: String, enum: ['initial', 'renewal'], default: 'initial' },
+    failureReason: { type: String, default: null },
+    // Set once the transaction's effect has been applied to the
+    // Subscription. A Payment with appliedAt=null after a crash is retried
+    // by the next webhook delivery / verify call (see billing/lifecycle.js).
+    appliedAt: { type: Date, default: null },
+    // Short claim lock so two concurrent deliveries can't both apply.
+    processingUntil: { type: Date, default: null },
   },
   { timestamps: true }
 )
 
 paymentSchema.index({ createdAt: -1 })
+// Idempotency: a gateway transaction is recorded (and applied) at most
+// once, no matter how many times the webhook is delivered or /verify is
+// called. Partial so legacy rows without an ID don't collide.
+paymentSchema.index(
+  { provider: 1, providerTransactionId: 1 },
+  { unique: true, partialFilterExpression: { providerTransactionId: { $type: 'string' } } }
+)
 
 export default mongoose.model('Payment', paymentSchema)
