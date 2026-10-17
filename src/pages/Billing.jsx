@@ -13,7 +13,20 @@ const STATUS_LABEL = {
   active: { text: 'Active', tone: 'ok' },
   past_due: { text: 'Payment failed', tone: 'warn' },
   canceled: { text: 'Canceled', tone: 'muted' },
-  expired: { text: 'Trial ended', tone: 'warn' },
+  expired: { text: 'Expired', tone: 'warn' },
+}
+
+const PAYMENT_STATUS = { successful: 'Paid', failed: 'Failed', pending: 'Pending' }
+
+const cap = (s) => (s ? s.charAt(0).toUpperCase() + s.slice(1) : '')
+
+function formatMoney(amount, currency) {
+  const c = (currency || 'usd').toUpperCase()
+  try {
+    return new Intl.NumberFormat(undefined, { style: 'currency', currency: c }).format(amount)
+  } catch {
+    return `${c} ${amount}`
+  }
 }
 
 function formatDate(dateStr) {
@@ -38,14 +51,16 @@ export default function Billing() {
   const [busyPlan, setBusyPlan] = useState(null)
   const [notice, setNotice] = useState('')
   const [cancelOpen, setCancelOpen] = useState(false)
+  const [payments, setPayments] = useState([])
 
   async function loadAll() {
     setLoading(true)
     setError('')
     try {
-      const [sub, { plans }] = await Promise.all([api.getSubscription(), api.getPlans()])
+      const [sub, { plans }, pay] = await Promise.all([api.getSubscription(), api.getPlans(), api.listPayments().catch(() => ({ payments: [] }))])
       setSubscription(sub)
       setPlans(plans)
+      setPayments(pay.payments || [])
 
       // Welcome-back signal — fires once per load when landing here with a
       // lapsed subscription, win-back's natural entry point. Subtle: it
@@ -66,18 +81,28 @@ export default function Billing() {
       const transactionId = searchParams.get('transaction_id')
       const status = searchParams.get('status')
 
-      if (transactionId && status === 'successful') {
+      if (status === 'cancelled' && !transactionId) {
+        setNotice('Checkout was cancelled. You have not been charged.')
+        setSearchParams({}, { replace: true })
+      } else if (transactionId) {
+        // The redirect itself proves nothing — the server re-verifies the
+        // transaction with Flutterwave before changing anything.
+        setNotice('Confirming your payment…')
         try {
           const result = await api.verifyCheckout(transactionId)
-          setNotice(
-            result.applied
-              ? result.reactivated
-                ? `Welcome back — you're on the ${result.plan} plan again.`
-                : `You're now on the ${result.plan} plan.`
-              : "We couldn't confirm that payment yet — it may still be processing."
-          )
+          if (result.applied && result.status !== 'failed') {
+            setNotice(result.reactivated ? `Welcome back — you're on the ${cap(result.plan)} plan again.` : `Payment confirmed. You're on the ${cap(result.plan)} plan.`)
+          } else if (result.duplicate) {
+            setNotice('Payment confirmed. Your plan is active.')
+          } else if (result.reason === 'amount_mismatch' || result.reason === 'currency_mismatch') {
+            setNotice("That payment didn't match the plan price, so it wasn't applied. Contact support if you were charged.")
+          } else if (result.status === 'failed' || status === 'failed') {
+            setNotice('The payment did not go through. You have not been upgraded.')
+          } else {
+            setNotice("We couldn't confirm that payment yet. If you completed it, it will appear here within a few minutes.")
+          }
         } catch (err) {
-          setNotice(`Payment verification failed: ${err.message}`)
+          setNotice(err.status === 403 ? 'That payment belongs to a different account.' : `We couldn't confirm the payment: ${err.message}`)
         }
         setSearchParams({}, { replace: true })
       } else if (searchParams.get('trial') === 'started') {
@@ -103,11 +128,15 @@ export default function Billing() {
       if (result.url) {
         window.location.href = result.url // external Flutterwave-hosted checkout
       } else if (result.redirect) {
-        navigate(result.redirect)
+        // Same route, so the mount effect won't re-run — show the outcome here.
+        if (result.redirect.includes('trial=started')) setNotice('Your 30-day free trial has started. No card needed.')
+        else if (result.redirect.includes('downgraded=free')) setNotice("You're now on the Free plan.")
+        navigate('/dashboard/billing', { replace: true })
         await loadAll()
+        setBusyPlan(null)
       }
     } catch (err) {
-      setError(err.message)
+      setError(err.status === 409 ? "You're already on that plan." : err.message)
       setBusyPlan(null)
     }
   }
@@ -139,10 +168,14 @@ export default function Billing() {
     return <p className="text-accent-dim">{error}</p>
   }
 
-  const statusInfo = STATUS_LABEL[subscription.subscription.status] || { text: subscription.subscription.status, tone: 'muted' }
+  const sub = subscription.subscription
+  let statusInfo = STATUS_LABEL[sub.status] || { text: sub.status, tone: 'muted' }
+  if (sub.status === 'active' && sub.cancelAtPeriodEnd) statusInfo = { text: 'Ends soon', tone: 'muted' }
+  if (sub.status === 'active' && sub.isComplimentary) statusInfo = { text: 'Complimentary', tone: 'ok' }
   const isPaidPlan = subscription.plan.monthlyPriceCents > 0
-  const needsPayment = subscription.subscription.status === 'expired' || subscription.subscription.status === 'past_due'
-  const isLapsed = subscription.subscription.status === 'canceled'
+  const needsPayment = sub.status === 'expired' || sub.status === 'past_due'
+  const isLapsed = sub.status === 'canceled'
+  const limitedToFree = isPaidPlan && subscription.effectivePlan?.slug !== subscription.plan.slug
 
   return (
     <div>
@@ -173,7 +206,7 @@ export default function Billing() {
             <p className="text-muted text-sm">{formatPrice(subscription.plan.monthlyPriceCents, subscription.plan.currency)}</p>
           </div>
 
-          {isPaidPlan && !needsPayment && !isLapsed && (
+          {isPaidPlan && sub.status === 'active' && !sub.cancelAtPeriodEnd && !sub.isComplimentary && (
             <Button variant="ghost" size="sm" onClick={openCancelDialog}>
               Cancel plan
             </Button>
@@ -185,10 +218,12 @@ export default function Billing() {
             <RevealMark size={20} />
             <div>
               <p className="text-sm font-medium text-ink mb-0.5">
-                {subscription.subscription.status === 'expired' ? 'Your trial has ended' : 'Your last payment failed'}
+                {sub.status === 'expired' ? (sub.trialEnd && !sub.lastPaymentAt ? 'Your trial has ended' : 'Your subscription has expired') : 'Your last renewal payment failed'}
               </p>
               <p className="text-xs text-muted">
-                Subscribe now to keep your {subscription.plan.name} plan features.
+                {sub.status === 'past_due'
+                  ? `${sub.lastPaymentError ? `Reason: ${sub.lastPaymentError}. ` : ''}Flutterwave will retry your card. You keep ${subscription.plan.name} features until ${formatDate(sub.graceEndsAt) || 'the grace period ends'}; after that your account moves to Free limits. You can also subscribe again below.`
+                  : `You're on Free plan limits now. Subscribe to get your ${subscription.plan.name} features back — your experiences are kept.`}
               </p>
             </div>
           </div>
@@ -206,16 +241,24 @@ export default function Billing() {
           </div>
         )}
 
-        {subscription.subscription.status === 'trialing' && (
+        {sub.status === 'trialing' && (
           <p className="text-xs text-muted mb-5">
-            Trial ends {formatDate(subscription.subscription.trialEnd)}.
+            Free trial ends {formatDate(sub.trialEnd)}. No card was taken — subscribe before then to keep these features.
           </p>
         )}
-        {subscription.subscription.status === 'active' && subscription.subscription.currentPeriodEnd && (
+        {sub.status === 'active' && sub.currentPeriodEnd && (
           <p className="text-xs text-muted mb-5">
-            {subscription.subscription.cancelAtPeriodEnd ? 'Access ends' : 'Renews'}{' '}
-            {formatDate(subscription.subscription.currentPeriodEnd)}.
+            {sub.isComplimentary
+              ? `Complimentary access until ${formatDate(sub.grantExpiresAt || sub.currentPeriodEnd)}.`
+              : sub.cancelAtPeriodEnd
+                ? `Cancelled — automatic renewal is off. You keep access until ${formatDate(sub.currentPeriodEnd)}, then move to Free.`
+                : sub.autoRenews
+                  ? `Renews automatically on ${formatDate(sub.currentPeriodEnd)}.`
+                  : `Current period ends ${formatDate(sub.currentPeriodEnd)}.`}
           </p>
+        )}
+        {limitedToFree && !needsPayment && !isLapsed && sub.status !== 'trialing' && (
+          <p className="text-xs text-accent-dim mb-5">Free plan limits currently apply.</p>
         )}
 
         <div className="grid sm:grid-cols-2 gap-5">
@@ -229,7 +272,17 @@ export default function Billing() {
             used={subscription.usage.aiGenerations.used}
             limit={subscription.usage.aiGenerations.limit}
           />
+          {subscription.usage.storage && (
+            <UsageBar label="File storage (MB)" used={subscription.usage.storage.usedMB} limit={subscription.usage.storage.limitMB} />
+          )}
         </div>
+        {subscription.effectivePlan?.slug === 'free' && subscription.usage.aiTrial?.available && (
+          <p className="mt-4 text-xs text-muted">
+            {subscription.usage.aiTrial.generateUsed
+              ? 'Your free AI trial has been used.'
+              : 'Free AI trial: one product analysis and one generated experience, for one experience.'}
+          </p>
+        )}
       </Card>
 
       <h2 className="font-sans font-medium text-ink mb-4">
@@ -243,14 +296,48 @@ export default function Billing() {
             isCurrent={plan.slug === subscription.plan.slug && !needsPayment && !isLapsed}
             busy={busyPlan === plan.slug}
             onSelect={handleSelectPlan}
+            disabled={Boolean(busyPlan)}
           />
         ))}
       </div>
+      <p className="mt-4 text-xs text-muted">
+        Paid plans are monthly card subscriptions processed by Flutterwave and renew automatically until you cancel. Cancelling stops future renewals; you keep access until the end of the period you paid for.
+      </p>
+
+      {payments.length > 0 && (
+        <Card hover={false} className="mt-10">
+          <h2 className="font-sans font-medium text-ink mb-4">Payment history</h2>
+          <div className="overflow-x-auto">
+            <table className="w-full text-sm">
+              <thead>
+                <tr className="text-left text-xs text-muted border-b border-line">
+                  <th scope="col" className="pb-2 font-medium">Date</th>
+                  <th scope="col" className="pb-2 font-medium">Plan</th>
+                  <th scope="col" className="pb-2 font-medium">Type</th>
+                  <th scope="col" className="pb-2 font-medium text-right">Amount</th>
+                  <th scope="col" className="pb-2 font-medium text-right">Status</th>
+                </tr>
+              </thead>
+              <tbody>
+                {payments.map((p) => (
+                  <tr key={p._id} className="border-b border-line last:border-0">
+                    <td className="py-2.5 text-muted whitespace-nowrap">{formatDate(p.createdAt)}</td>
+                    <td className="py-2.5 text-ink">{p.plan?.name || '—'}</td>
+                    <td className="py-2.5 text-muted">{p.kind === 'renewal' ? 'Renewal' : 'First payment'}</td>
+                    <td className="py-2.5 text-right tabular-nums">{formatMoney(p.amount, p.currency)}</td>
+                    <td className={`py-2.5 text-right ${p.status === 'failed' ? 'text-accent-dim' : 'text-muted'}`}>{PAYMENT_STATUS[p.status] || p.status}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </Card>
+      )}
 
       <CancelSubscriptionDialog
         open={cancelOpen}
         planName={subscription.plan.name}
-        accessEndsLabel={formatDate(subscription.subscription.currentPeriodEnd)}
+        accessEndsLabel={formatDate(sub.currentPeriodEnd)}
         onConfirm={handleCancelConfirm}
         onCancel={() => setCancelOpen(false)}
       />

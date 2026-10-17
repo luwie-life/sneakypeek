@@ -168,21 +168,31 @@ export default function Onboarding() {
       setGenMessage('Saving your details…')
       await api.updateExperience(experienceId, form)
 
+      // Clear each material once it's saved so "Try again" never duplicates it.
       let hasMaterial = false
       if (materialText.trim()) {
         setGenMessage('Reading what you gave us…')
         await api.createMaterial(experienceId, { type: 'pasted', name: 'Pasted content', content: materialText })
+        setMaterialText('')
+        localStorage.removeItem(draftMaterialKey(experienceId))
         hasMaterial = true
       }
       if (materialFile) {
         setGenMessage('Reading your file…')
         await api.uploadMaterial(experienceId, materialFile)
+        setMaterialFile(null)
         hasMaterial = true
       }
 
       if (hasMaterial || form.description) {
         setGenMessage('Understanding your product…')
-        await api.analyzeProduct(experienceId)
+        // Analysis improves the draft but isn't required — a failure here
+        // (other than a plan limit) shouldn't block generation.
+        try {
+          await api.analyzeProduct(experienceId)
+        } catch (err) {
+          if (err.limitReached && !err.trialUsed) throw err
+        }
       }
 
       setGenMessage('Finding the strongest ideas…')
@@ -196,6 +206,7 @@ export default function Onboarding() {
       navigate(`/dashboard/studio/${experienceId}`)
     } catch (err) {
       if (err.limitReached) setLimitError(err)
+      else if (err.aiBusy) setError('Another AI request from your account is still running. Wait a moment and try again.')
       else setError(err.message)
       setStep('error')
     }
@@ -315,7 +326,20 @@ export default function Onboarding() {
         <Step stepKey="error">
           {limitError ? (
             limitError.limitKey === 'aiGenerationsPerMonth' ? (
-              <AiUpgradePrompt onDismiss={() => navigate('/dashboard')} />
+              <AiUpgradePrompt
+                trialUsed={Boolean(limitError.trialUsed)}
+                monthlyLimit={!limitError.trialUsed && limitError.limit > 0}
+                onStarterDraft={async () => {
+                  try {
+                    await api.starterDraft(experienceId)
+                  } catch {
+                    // An existing draft is fine — open it as is.
+                  }
+                  localStorage.removeItem(DRAFT_ID_KEY)
+                  navigate(`/dashboard/studio/${experienceId}`)
+                }}
+                onDismiss={() => navigate('/dashboard')}
+              />
             ) : (
               <UpgradePrompt error={limitError} />
             )

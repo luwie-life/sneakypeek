@@ -10,7 +10,8 @@ import { useExperiences } from '../hooks/useExperiences'
 import { api } from '../lib/api'
 
 export default function Experiences() {
-  const { experiences, loading, error, reload } = useExperiences()
+  const [showArchived, setShowArchived] = useState(false)
+  const { experiences, loading, error, reload } = useExperiences({ includeArchived: showArchived })
   const [busyId, setBusyId] = useState(null)
   const [actionError, setActionError] = useState('')
   const [pendingDelete, setPendingDelete] = useState(null)
@@ -56,6 +57,9 @@ export default function Experiences() {
       <div className="flex items-center justify-between mb-6">
         <p className="text-muted text-sm">
           {experiences.length} experience{experiences.length === 1 ? '' : 's'}
+          <button type="button" onClick={() => setShowArchived(!showArchived)} className="ml-3 text-xs underline-offset-2 hover:underline hover:text-ink">
+            {showArchived ? 'Hide archived' : 'Show archived'}
+          </button>
         </p>
         <Button variant="accent" size="sm" icon={Plus} onClick={() => navigate('/dashboard/experiences/new')}>
           New experience
@@ -106,14 +110,16 @@ export default function Experiences() {
                     Edit
                   </Button>
                 </Link>
-                <Button
-                  variant={exp.status === 'published' ? 'outline' : 'accent'}
-                  size="sm"
-                  disabled={busyId === exp._id}
-                  onClick={() => togglePublish(exp)}
-                >
-                  {exp.status === 'published' ? 'Unpublish' : 'Publish'}
-                </Button>
+                {exp.status !== 'archived' && (
+                  <Button
+                    variant={exp.status === 'published' ? 'outline' : 'accent'}
+                    size="sm"
+                    disabled={busyId === exp._id}
+                    onClick={() => togglePublish(exp)}
+                  >
+                    {exp.status === 'published' ? 'Unpublish' : 'Publish'}
+                  </Button>
+                )}
                 <Button
                   variant="ghost"
                   size="sm"
