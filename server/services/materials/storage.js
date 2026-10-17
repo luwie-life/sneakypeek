@@ -4,7 +4,12 @@ import { fileURLToPath } from 'url'
 import { customAlphabet } from 'nanoid'
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url))
-const UPLOAD_DIR = path.resolve(__dirname, '../../uploads')
+// STORAGE_DIR lets production point uploads at a persistent volume. The
+// default (server/uploads) is fine locally but is wiped on hosts with an
+// ephemeral filesystem — see docs/DEPLOYMENT.md.
+const UPLOAD_DIR = process.env.STORAGE_DIR
+  ? path.resolve(process.env.STORAGE_DIR)
+  : path.resolve(__dirname, '../../uploads')
 
 const key = customAlphabet('abcdefghijklmnopqrstuvwxyz0123456789', 24)
 

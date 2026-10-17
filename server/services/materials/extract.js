@@ -1,5 +1,6 @@
 import { PDFParse } from 'pdf-parse'
 import { getStorageProvider } from './storage.js'
+import { safeFetchText } from './safeFetch.js'
 
 const MAX_EXTRACTED_LENGTH = 50000 // keeps prompts and documents bounded regardless of source size
 
@@ -24,10 +25,8 @@ async function extractPdf(material) {
 }
 
 async function extractUrl(material) {
-  const res = await fetch(material.source, { redirect: 'follow' })
-  if (!res.ok) throw new Error(`Fetching URL failed (${res.status})`)
-
-  const html = await res.text()
+  // SSRF-safe: public addresses only, bounded size/time, redirects re-checked.
+  const html = await safeFetchText(material.source)
   // Deliberately simple — this is a best-effort text extraction, not a
   // browser. Strips scripts/styles/tags, collapses whitespace.
   const text = html
@@ -44,7 +43,7 @@ function extractPlainText(material) {
   return sanitize(material.content || '')
 }
 
-const NOT_YET_SUPPORTED = new Set(['image', 'audio', 'video'])
+const NOT_YET_SUPPORTED = new Set(['image', 'audio', 'video', 'file'])
 
 /**
  * Extracts usable text from a material. Throws on failure — the caller
